@@ -412,8 +412,22 @@ def unscale_gradients(grads, scale):
     """
     return {k: (v / scale).astype(np.float32) for k, v in grads.items()}
 
-# Step 23 - has_non_finite_gradients (not yet solved)
-# TODO: implement
+# Step 23 - has_non_finite_gradients
+def has_non_finite_gradients(grads):
+    """
+    Scans a dictionary of gradient arrays and returns True if any gradient contains
+    a NaN or Inf value, otherwise False.
+    
+    Args:
+        grads: Dictionary mapping string keys to gradient NumPy arrays.
+        
+    Returns:
+        bool: True if any non-finite value is found, False otherwise.
+    """
+    for v in grads.values():
+        if not np.all(np.isfinite(v)):
+            return True
+    return False
 
 # Step 24 - mixed_precision_step (not yet solved)
 # TODO: implement
