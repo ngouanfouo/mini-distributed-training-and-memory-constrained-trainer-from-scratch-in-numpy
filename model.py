@@ -144,8 +144,46 @@ def first_linear_backward(d_z1, x, w1):
     
     return dx, dW1, db1
 
-# Step 10 - mlp_backward (not yet solved)
-# TODO: implement
+# Step 10 - mlp_backward
+def mlp_backward(dy_pred, cache, params):
+    # Extract cached values
+    x = cache['x']        # input to first layer, shape (N, in_dim)
+    z1 = cache['z1']      # pre-activation of first layer, shape (N, hidden_dim)
+    a1 = cache['a1']      # post-activation of first layer, shape (N, hidden_dim)
+    z2 = cache['z2']      # final prediction, shape (N, out_dim)
+    
+    # Extract parameters
+    W1 = params['W1']     # shape (in_dim, hidden_dim)
+    W2 = params['W2']     # shape (hidden_dim, out_dim)
+    
+    # Backward through second linear layer: z2 = a1 @ W2 + b2
+    # Input to this layer: a1 (post-ReLU), weight: W2
+    da1, dW2, db2 = linear_backward(dy_pred, a1, W2)
+    # da1 shape: (N, hidden_dim)
+    # dW2 shape: (hidden_dim, out_dim)
+    # db2 shape: (out_dim,)
+    
+    # Backward through ReLU: a1 = ReLU(z1)
+    # Need pre-activation z1 from cache
+    dz1 = relu_backward(da1, z1)
+    # dz1 shape: (N, hidden_dim)
+    
+    # Backward through first linear layer: z1 = x @ W1 + b1
+    # Use helper for first layer specifically
+    dx, dW1, db1 = first_linear_backward(dz1, x, W1)
+    # dx shape: (N, in_dim) - not needed for parameter updates
+    # dW1 shape: (in_dim, hidden_dim)
+    # db1 shape: (hidden_dim,)
+    
+    # Return gradients dictionary matching params structure
+    grads = {
+        'W1': dW1,
+        'b1': db1,
+        'W2': dW2,
+        'b2': db2
+    }
+    
+    return grads
 
 # Step 11 - split_into_micro_batches (not yet solved)
 # TODO: implement
