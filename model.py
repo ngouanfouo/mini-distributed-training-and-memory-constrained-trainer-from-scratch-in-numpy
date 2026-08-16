@@ -60,8 +60,30 @@ def relu_forward(x):
     # TODO: apply the ReLU activation elementwise and return an array of the same shape.
     return np.maximum(0,x)
 
-# Step 5 - mlp_forward (not yet solved)
-# TODO: implement
+# Step 5 - mlp_forward
+def mlp_forward(x, params):
+    # Extract parameters
+    W1, b1 = params['W1'], params['b1']
+    W2, b2 = params['W2'], params['b2']
+    
+    # First linear layer: z1 = x @ W1 + b1
+    z1 = linear_forward(x, W1, b1)
+    
+    # ReLU activation: a1 = ReLU(z1)
+    a1 = relu_forward(z1)
+    
+    # Second linear layer: z2 = a1 @ W2 + b2 (final prediction)
+    z2 = linear_forward(a1, W2, b2)
+    
+    # Cache intermediate tensors needed for backward pass
+    cache = {
+        'x': x,      # input to first layer
+        'z1': z1,    # pre-activation of first layer (needed for ReLU gradient)
+        'a1': a1,    # post-activation of first layer (input to second layer)
+        'z2': z2     # final prediction
+    }
+    
+    return z2, cache
 
 # Step 6 - mse_loss_and_grad (not yet solved)
 # TODO: implement
