@@ -684,8 +684,24 @@ def bucket_gradients(grads, bucket_size):
         
     return buckets, meta
 
-# Step 31 - init_adam_state (not yet solved)
-# TODO: implement
+# Step 31 - init_adam_state
+def init_adam_state(params):
+    """
+    Builds the Adam optimizer state for a given parameter dictionary.
+    
+    Args:
+        params: Dictionary mapping parameter names to NumPy arrays.
+        
+    Returns:
+        A dictionary containing:
+            - 'm': Dictionary of first moment vectors initialized to zeros.
+            - 'v': Dictionary of second moment vectors initialized to zeros.
+            - 't': Integer step counter initialized to 0.
+    """
+    m = {k: np.zeros_like(v) for k, v in params.items()}
+    v = {k: np.zeros_like(v) for k, v in params.items()}
+    t = 0
+    return {'m': m, 'v': v, 't': t}
 
 # Step 32 - partition_optimizer_state (not yet solved)
 # TODO: implement
