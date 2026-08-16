@@ -703,8 +703,51 @@ def init_adam_state(params):
     t = 0
     return {'m': m, 'v': v, 't': t}
 
-# Step 32 - partition_optimizer_state (not yet solved)
-# TODO: implement
+# Step 32 - partition_optimizer_state
+def partition_optimizer_state(state, num_workers):
+    """
+    Partitions Adam's first and second moment tensors across num_workers so each 
+    worker owns one contiguous slice of the flattened optimizer state for every parameter,
+    along with their original shapes and shard slices.
+    
+    Args:
+        state: Dictionary containing 'm' (first moments), 'v' (second moments), and 't' (step counter).
+        num_workers: Integer number of workers to partition across.
+        
+    Returns:
+        A list of length num_workers where each element is a dictionary containing 
+        'm', 'v', 'shard_slices', 'shapes', and 't'.
+    """
+    m_state = state['m']
+    v_state = state['v']
+    t = state['t']
+    
+    # Capture the original shapes of each parameter array
+    shapes = {k: arr.shape for k, arr in m_state.items()}
+    
+    # Initialize worker state dictionaries
+    workers = [{'m': {}, 'v': {}, 'shard_slices': {}, 'shapes': shapes, 't': t} for _ in range(num_workers)]
+    
+    for k in m_state.keys():
+        m_flat = m_state[k].flatten()
+        v_flat = v_state[k].flatten()
+        n = m_flat.size
+        
+        base_size = n // num_workers
+        remainder = n % num_workers
+        
+        start = 0
+        for i in range(num_workers):
+            size = base_size + (1 if i < remainder else 0)
+            end = start + size
+            
+            workers[i]['m'][k] = m_flat[start:end]
+            workers[i]['v'][k] = v_flat[start:end]
+            workers[i]['shard_slices'][k] = (start, end)
+            
+            start = end
+            
+    return workers
 
 # Step 33 - local_shard_adam_update (not yet solved)
 # TODO: implement
