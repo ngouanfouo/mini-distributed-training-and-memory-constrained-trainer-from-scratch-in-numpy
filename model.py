@@ -606,8 +606,36 @@ def ring_all_reduce_mean(per_worker_arrays):
     
     return final_mean.reshape(original_shape)
 
-# Step 29 - data_parallel_train_step (not yet solved)
-# TODO: implement
+# Step 29 - data_parallel_train_step
+def data_parallel_train_step(x, y, params, num_workers, lr):
+    """
+    Performs one synchronous data parallel SGD update.
+    
+    Args:
+        x: Full input batch dataset array.
+        y: Full target batch dataset array.
+        params: Dictionary of MLP parameters ('W1', 'b1', 'W2', 'b2').
+        num_workers: Integer number of data-parallel workers.
+        lr: Learning rate for SGD.
+        
+    Returns:
+        A new parameter dictionary updated via all-reduced gradients.
+    """
+    # 1. Shard the dataset across the specified number of workers
+    shards = shard_dataset_across_workers(x, y, num_workers)
+    
+    # 2. Compute local parameter gradients for each worker's shard
+    per_worker_grads = [compute_local_gradients(x_shard, y_shard, params) for x_shard, y_shard in shards]
+    
+    # 3. Synchronize local gradients across all workers using all-reduce mean
+    avg_grads = all_reduce_mean(per_worker_grads)
+    
+    # 4. Update parameters using a vanilla SGD step
+    new_params = {}
+    for k in params:
+        new_params[k] = params[k] - lr * avg_grads[k]
+        
+    return new_params
 
 # Step 30 - bucket_gradients (not yet solved)
 # TODO: implement
