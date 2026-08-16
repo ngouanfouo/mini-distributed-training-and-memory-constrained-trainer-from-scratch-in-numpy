@@ -637,8 +637,52 @@ def data_parallel_train_step(x, y, params, num_workers, lr):
         
     return new_params
 
-# Step 30 - bucket_gradients (not yet solved)
-# TODO: implement
+# Step 30 - bucket_gradients
+def bucket_gradients(grads, bucket_size):
+    """
+    Packs flattened gradient arrays from grads into fixed-size 1D buckets.
+    
+    Args:
+        grads: Dictionary mapping parameter names to NumPy arrays.
+        bucket_size: Maximum number of elements per bucket.
+        
+    Returns:
+        A tuple of (buckets, meta) where buckets is a list of 1D NumPy arrays 
+        and meta is a list of (name, shape, start, end, bucket_index) tuples.
+    """
+    if not grads:
+        return [], []
+    
+    buckets = []
+    meta = []
+    
+    current_bucket_list = []
+    current_size = 0
+    current_bucket_index = 0
+    
+    for name in sorted(grads.keys()):
+        arr = grads[name]
+        shape = arr.shape
+        flat = arr.flatten()
+        size = flat.size
+        
+        if current_size > 0 and current_size + size > bucket_size:
+            buckets.append(np.concatenate(current_bucket_list))
+            current_bucket_list = []
+            current_size = 0
+            current_bucket_index += 1
+            
+        start = current_size
+        end = start + size
+        current_bucket_list.append(flat)
+        current_size = end
+        
+        meta.append((name, shape, start, end, current_bucket_index))
+        
+    if current_bucket_list:
+        buckets.append(np.concatenate(current_bucket_list))
+        
+    return buckets, meta
 
 # Step 31 - init_adam_state (not yet solved)
 # TODO: implement
