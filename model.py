@@ -478,8 +478,39 @@ def mixed_precision_step(x, y, master_params, scale, lr):
             
     return float(loss_val), new_master, skipped
 
-# Step 25 - shard_dataset_across_workers (not yet solved)
-# TODO: implement
+# Step 25 - shard_dataset_across_workers
+def shard_dataset_across_workers(x, y, num_workers):
+    """
+    Splits the dataset (x, y) along the batch axis into num_workers contiguous shards.
+    Distributes any remainder evenly among the first workers so that earlier workers 
+    receive one extra sample and every sample belongs to exactly one worker.
+
+    Args:
+        x: Input dataset array of shape (N, ...)
+        y: Target dataset array of shape (N, ...)
+        num_workers: Integer number of workers
+
+    Returns:
+        A list of length num_workers containing tuples of (x_shard, y_shard).
+    """
+    n_samples = x.shape[0]
+    base_size = n_samples // num_workers
+    remainder = n_samples % num_workers
+
+    shards = []
+    start = 0
+    for i in range(num_workers):
+        # Distribute the remainder to the first 'remainder' workers
+        size = base_size + (1 if i < remainder else 0)
+        end = start + size
+        
+        x_shard = x[start:end]
+        y_shard = y[start:end]
+        shards.append((x_shard, y_shard))
+        
+        start = end
+
+    return shards
 
 # Step 26 - compute_local_gradients (not yet solved)
 # TODO: implement
