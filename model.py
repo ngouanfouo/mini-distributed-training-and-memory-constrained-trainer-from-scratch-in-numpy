@@ -185,8 +185,22 @@ def mlp_backward(dy_pred, cache, params):
     
     return grads
 
-# Step 11 - split_into_micro_batches (not yet solved)
-# TODO: implement
+# Step 11 - split_into_micro_batches
+def split_into_micro_batches(x, y, micro_batch_size):
+    # Get total number of samples
+    n_samples = x.shape[0]
+    
+    # Initialize list to store micro batches
+    micro_batches = []
+    
+    # Iterate over the full batch in steps of micro_batch_size
+    for start in range(0, n_samples, micro_batch_size):
+        end = min(start + micro_batch_size, n_samples)
+        x_mb = x[start:end]
+        y_mb = y[start:end]
+        micro_batches.append((x_mb, y_mb))
+    
+    return micro_batches
 
 # Step 12 - accumulate_gradients (not yet solved)
 # TODO: implement
