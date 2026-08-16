@@ -85,8 +85,20 @@ def mlp_forward(x, params):
     
     return z2, cache
 
-# Step 6 - mse_loss_and_grad (not yet solved)
-# TODO: implement
+# Step 6 - mse_loss_and_grad
+def mse_loss_and_grad(y_pred, y_true):
+    # Compute the residual
+    residual = y_pred - y_true
+    
+    # Compute loss: average of squared residuals over all elements
+    loss = np.mean(residual ** 2).item()  # convert to Python float
+    
+    # Compute gradient: dL/dy_pred = 2 * residual / (N * D)
+    # np.mean divides by the total number of elements, so we use the same normalization
+    n_elements = residual.size
+    dy_pred = 2 * residual / n_elements
+    
+    return loss, dy_pred
 
 # Step 7 - linear_backward (not yet solved)
 # TODO: implement
