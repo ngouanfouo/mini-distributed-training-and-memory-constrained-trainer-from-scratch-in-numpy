@@ -379,8 +379,22 @@ def make_master_params(params):
     """
     return {k: v.astype(np.float32) for k, v in params.items()}
 
-# Step 21 - scale_loss (not yet solved)
-# TODO: implement
+# Step 21 - scale_loss
+def scale_loss(loss, dy_pred, scale):
+    """
+    Multiplies both the scalar loss and the upstream gradient dy_pred by a fixed loss scale factor.
+    
+    Args:
+        loss: Scalar loss value.
+        dy_pred: NumPy array of upstream gradients.
+        scale: Loss scaling factor (scalar).
+        
+    Returns:
+        A tuple of (scaled_loss, scaled_dy_pred).
+    """
+    scaled_loss = loss * scale
+    scaled_dy_pred = dy_pred * scale
+    return scaled_loss, scaled_dy_pred
 
 # Step 22 - unscale_gradients (not yet solved)
 # TODO: implement
