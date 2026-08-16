@@ -129,8 +129,20 @@ def relu_backward(d_out, z):
     dz = d_out * (z > 0)
     return dz
 
-# Step 9 - first_linear_backward (not yet solved)
-# TODO: implement
+# Step 9 - first_linear_backward
+def first_linear_backward(d_z1, x, w1):
+    # Shape: (N, hidden_dim) @ (hidden_dim, in_dim) -> (N, in_dim)
+    dx = d_z1 @ w1.T
+    
+    # Gradient with respect to weight: dW1 = x.T @ d_z1
+    # Shape: (in_dim, N) @ (N, hidden_dim) -> (in_dim, hidden_dim)
+    dW1 = x.T @ d_z1
+    
+    # Gradient with respect to bias: db1 = sum of d_z1 over batch dimension
+    # Shape: (hidden_dim,)
+    db1 = np.sum(d_z1, axis=0)
+    
+    return dx, dW1, db1
 
 # Step 10 - mlp_backward (not yet solved)
 # TODO: implement
