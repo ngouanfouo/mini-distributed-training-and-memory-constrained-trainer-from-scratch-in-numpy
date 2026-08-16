@@ -24,8 +24,31 @@ def make_synthetic_regression_batch(batch_size, in_dim, out_dim, seed):
     
     return x, y
 
-# Step 2 - init_mlp_params (not yet solved)
-# TODO: implement
+# Step 2 - init_mlp_params
+def init_mlp_params(in_dim, hidden_dim, out_dim, seed):
+    # Seed numpy's global RNG for reproducibility
+    np.random.seed(seed)
+    
+    # He initialization for W1: std = sqrt(2 / fan_in) where fan_in = in_dim
+    std_w1 = np.sqrt(2.0 / in_dim)
+    W1 = np.random.randn(in_dim, hidden_dim).astype(np.float64) * std_w1
+    
+    # Bias for first layer starts at zero
+    b1 = np.zeros(hidden_dim, dtype=np.float64)
+    
+    # He initialization for W2: std = sqrt(2 / fan_in) where fan_in = hidden_dim
+    std_w2 = np.sqrt(2.0 / hidden_dim)
+    W2 = np.random.randn(hidden_dim, out_dim).astype(np.float64) * std_w2
+    
+    # Bias for second layer starts at zero
+    b2 = np.zeros(out_dim, dtype=np.float64)
+    
+    return {
+        'W1': W1,
+        'b1': b1,
+        'W2': W2,
+        'b2': b2
+    }
 
 # Step 3 - linear_forward (not yet solved)
 # TODO: implement
