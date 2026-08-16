@@ -429,8 +429,54 @@ def has_non_finite_gradients(grads):
             return True
     return False
 
-# Step 24 - mixed_precision_step (not yet solved)
-# TODO: implement
+# Step 24 - mixed_precision_step
+def mixed_precision_step(x, y, master_params, scale, lr):
+    """
+    Runs a single mixed precision training step: half-precision forward/backward 
+    with loss scaling, gradient unscaling, overflow checking, and full-precision SGD update.
+    
+    Args:
+        x: Input batch (NumPy array).
+        y: Target batch (NumPy array).
+        master_params: Dictionary of float32 master parameter arrays.
+        scale: Loss scaling factor.
+        lr: Learning rate for SGD.
+        
+    Returns:
+        A tuple of (unscaled_loss, new_master_params, skipped_flag).
+    """
+    # 1. Create half-precision views of master parameters and inputs
+    params_fp16 = cast_to_half_precision(master_params)
+    x_fp16 = x.astype(np.float16)
+    y_fp16 = y.astype(np.float16)
+    
+    # 2. Run forward pass in fp16
+    y_pred, cache = mlp_forward(x_fp16, params_fp16)
+    
+    # 3. Compute loss and upstream gradient
+    loss_val, dy_pred = mse_loss_and_grad(y_pred, y_fp16)
+    
+    # 4. Scale loss and upstream gradient to prevent underflow
+    scaled_loss, scaled_dy = scale_loss(loss_val, dy_pred, scale)
+    
+    # 5. Run backward pass in fp16
+    grads_fp16 = mlp_backward(scaled_dy, cache, params_fp16)
+    
+    # 6. Unscale gradients back to float32
+    grads_fp32 = unscale_gradients(grads_fp16, scale)
+    
+    # 7. Check for overflow (NaN or Inf)
+    skipped = has_non_finite_gradients(grads_fp32)
+    
+    # 8. Update master parameters (ensuring dtype is explicitly float32) or skip update on overflow
+    new_master = {}
+    for k, param in master_params.items():
+        if skipped:
+            new_master[k] = param.astype(np.float32)
+        else:
+            new_master[k] = (param - lr * grads_fp32[k]).astype(np.float32)
+            
+    return float(loss_val), new_master, skipped
 
 # Step 25 - shard_dataset_across_workers (not yet solved)
 # TODO: implement
