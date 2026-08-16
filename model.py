@@ -524,8 +524,30 @@ def compute_local_gradients(x, y, params):
     grads = mlp_backward(dy_pred, cache, params)
     return grads
 
-# Step 27 - all_reduce_mean (not yet solved)
-# TODO: implement
+# Step 27 - all_reduce_mean
+def all_reduce_mean(per_worker_grads):
+    """
+    Performs a logical all-reduce that averages a list of gradient dictionaries 
+    produced by different data-parallel workers elementwise.
+
+    Args:
+        per_worker_grads: A list of dictionaries, where each dictionary maps parameter 
+                          names to NumPy arrays of gradients.
+
+    Returns:
+        A single dictionary with the same keys, where each value is the elementwise 
+        mean across all workers.
+    """
+    if not per_worker_grads:
+        return {}
+    
+    keys = per_worker_grads[0].keys()
+    
+    # Average elementwise across workers for each parameter key
+    return {
+        key: np.mean([worker_dict[key] for worker_dict in per_worker_grads], axis=0)
+        for key in keys
+    }
 
 # Step 28 - ring_all_reduce_mean (not yet solved)
 # TODO: implement
