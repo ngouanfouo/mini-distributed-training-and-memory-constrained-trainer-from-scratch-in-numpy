@@ -225,11 +225,43 @@ def scale_accumulated_gradients(accum_grads, num_micro_batches):
     
     return scaled_grads
 
-# Step 14 - grad_accumulation_step (not yet solved)
-# TODO: implement
+# Step 14 - grad_accumulation_step
+def grad_accumulation_step(x, y, params, micro_batch_size):
+    micro_batches = split_into_micro_batches(x, y, micro_batch_size)
+    K = len(micro_batches)
+    total_grads = None
 
-# Step 15 - mlp_forward_checkpointed (not yet solved)
-# TODO: implement
+    for x_mb, y_mb in micro_batches:
+        y_pred, cache = mlp_forward(x_mb, params)
+        loss, dy_pred = mse_loss_and_grad(y_pred, y_mb)
+        new_grads = mlp_backward(dy_pred, cache, params)
+
+        # accumulate the RAW micro-batch gradient (no scaling yet)
+        total_grads = accumulate_gradients(total_grads, new_grads)
+
+    # apply the averaging exactly once, at the end
+    total_grads = {k: v / K for k, v in total_grads.items()}
+    return total_grads
+
+# Step 15 - mlp_forward_checkpointed
+def mlp_forward_checkpointed(x, params):
+    # Extract parameters
+    W1, b1 = params['W1'], params['b1']
+    W2, b2 = params['W2'], params['b2']
+    
+    # First linear layer: z1 = x @ W1 + b1
+    z1 = linear_forward(x, W1, b1)
+    
+    # ReLU activation: a1 = ReLU(z1)
+    a1 = relu_forward(z1)
+    
+    # Second linear layer: z2 = a1 @ W2 + b2 (final prediction)
+    z2 = linear_forward(a1, W2, b2)
+    
+    # Cache only the block input x (minimal for recomputation)
+    cache = {'x': x}
+    
+    return z2, cache
 
 # Step 16 - recompute_block_activations (not yet solved)
 # TODO: implement
