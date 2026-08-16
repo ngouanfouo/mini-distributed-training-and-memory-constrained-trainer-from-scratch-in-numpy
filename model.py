@@ -549,8 +549,62 @@ def all_reduce_mean(per_worker_grads):
         for key in keys
     }
 
-# Step 28 - ring_all_reduce_mean (not yet solved)
-# TODO: implement
+# Step 28 - ring_all_reduce_mean
+def ring_all_reduce_mean(per_worker_arrays):
+    """
+    Averages a list of identically shaped arrays across simulated workers using 
+    a ring reduce-scatter followed by ring all-gather over equal chunks.
+
+    Args:
+        per_worker_arrays: List of NumPy arrays of the same shape.
+
+    Returns:
+        A single NumPy array of the same shape containing the elementwise mean.
+    """
+    if not per_worker_arrays:
+        return np.array([])
+    
+    original_shape = per_worker_arrays[0].shape
+    num_workers = len(per_worker_arrays)
+    
+    # 1. Flatten each worker's array
+    flat_arrays = [arr.flatten() for arr in per_worker_arrays]
+    
+    if num_workers == 1:
+        return per_worker_arrays[0].copy()
+
+    # 2. Split each worker's array into num_workers chunks using np.array_split
+    chunks = [list(np.array_split(arr, num_workers)) for arr in flat_arrays]
+    
+    # 3. Reduce-Scatter Phase
+    for s in range(num_workers - 1):
+        next_chunks = [list(w_chunks) for w_chunks in chunks]
+        for i in range(num_workers):
+            send_chunk_idx = (i - s) % num_workers
+            recv_chunk_idx = (i - s - 1) % num_workers
+            src_worker = (i - 1) % num_workers
+            
+            incoming = chunks[src_worker][recv_chunk_idx]
+            next_chunks[i][recv_chunk_idx] = chunks[i][recv_chunk_idx] + incoming
+        chunks = next_chunks
+
+    # 4. All-Gather Phase
+    for s in range(num_workers - 1):
+        next_chunks = [list(w_chunks) for w_chunks in chunks]
+        for i in range(num_workers):
+            send_chunk_idx = (i - s + 1) % num_workers
+            recv_chunk_idx = (i - s) % num_workers
+            src_worker = (i - 1) % num_workers
+            
+            incoming = chunks[src_worker][recv_chunk_idx]
+            next_chunks[i][recv_chunk_idx] = incoming
+        chunks = next_chunks
+
+    # 5. Reconstruct the final averaged array from worker 0
+    final_flat = np.concatenate(chunks[0])
+    final_mean = final_flat / num_workers
+    
+    return final_mean.reshape(original_shape)
 
 # Step 29 - data_parallel_train_step (not yet solved)
 # TODO: implement
