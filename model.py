@@ -263,8 +263,30 @@ def mlp_forward_checkpointed(x, params):
     
     return z2, cache
 
-# Step 16 - recompute_block_activations (not yet solved)
-# TODO: implement
+# Step 16 - recompute_block_activations
+def recompute_block_activations(x, params):
+    # Extract parameters
+    W1, b1 = params['W1'], params['b1']
+    W2, b2 = params['W2'], params['b2']
+    
+    # Recompute first linear layer: z1 = x @ W1 + b1
+    z1 = linear_forward(x, W1, b1)
+    
+    # Recompute ReLU activation: a1 = ReLU(z1)
+    a1 = relu_forward(z1)
+    
+    # Recompute second linear layer: z2 = a1 @ W2 + b2
+    z2 = linear_forward(a1, W2, b2)
+    
+    # Return full cache with all intermediate tensors
+    cache = {
+        'x': x,      # block input
+        'z1': z1,    # pre-activation of first layer
+        'a1': a1,    # post-activation of first layer (hidden)
+        'z2': z2     # final prediction
+    }
+    
+    return cache
 
 # Step 17 - mlp_backward_checkpointed (not yet solved)
 # TODO: implement
