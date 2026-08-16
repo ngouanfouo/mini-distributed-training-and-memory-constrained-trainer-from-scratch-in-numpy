@@ -365,8 +365,19 @@ def cast_to_half_precision(values):
     """
     return {k: v.astype(np.float16) for k, v in values.items()}
 
-# Step 20 - make_master_params (not yet solved)
-# TODO: implement
+# Step 20 - make_master_params
+def make_master_params(params):
+    """
+    Builds the float32 master copy of every parameter tensor for a mixed precision trainer.
+    
+    Args:
+        params: Dictionary mapping string keys to NumPy arrays (potentially float16).
+        
+    Returns:
+        A new dictionary with the same keys and shapes, containing independent copies 
+        of each array stored in np.float32.
+    """
+    return {k: v.astype(np.float32) for k, v in params.items()}
 
 # Step 21 - scale_loss (not yet solved)
 # TODO: implement
