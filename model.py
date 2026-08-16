@@ -844,8 +844,31 @@ def all_gather_param_shards(param_shards_per_worker, shapes, shard_slices_per_wo
     
     return gathered_params
 
-# Step 35 - zero_optimizer_step (not yet solved)
-# TODO: implement
+# Step 35 - zero_optimizer_step
+def zero_optimizer_step(params, grads, worker_states, lr=0.001,
+                         beta1=0.9, beta2=0.999, eps=1e-8):
+    shapes = {name: arr.shape for name, arr in params.items()}
+
+    param_shards_per_worker = []
+    shard_slices_per_worker = []
+    new_worker_states = []
+
+    for ws in worker_states:
+        # Hand the FULL params/grads + this worker's own state to the helper.
+        # It owns the slicing (via ws['shard_slices']) and the Adam math.
+        updated_shards, updated_ws = local_shard_adam_update(
+            params, grads, ws, lr, beta1, beta2, eps
+        )
+
+        param_shards_per_worker.append(updated_shards)
+        shard_slices_per_worker.append(ws['shard_slices'])
+        new_worker_states.append(updated_ws)
+
+    new_params = all_gather_param_shards(
+        param_shards_per_worker, shapes, shard_slices_per_worker
+    )
+
+    return new_params, new_worker_states
 
 # Step 36 - compute_param_memory_bytes (not yet solved)
 # TODO: implement
