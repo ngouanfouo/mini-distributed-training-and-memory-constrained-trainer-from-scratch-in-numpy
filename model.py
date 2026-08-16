@@ -810,8 +810,39 @@ def local_shard_adam_update(params, grads, worker_state, lr=1e-3, beta1=0.9, bet
     
     return updated_param_shards, updated_worker_state
 
-# Step 34 - all_gather_param_shards (not yet solved)
-# TODO: implement
+# Step 34 - all_gather_param_shards
+def all_gather_param_shards(param_shards_per_worker, shapes, shard_slices_per_worker):
+    # Initialize the result dictionary
+    gathered_params = {}
+    
+    # Get the parameter names from the first worker's shards
+    param_names = list(param_shards_per_worker[0].keys())
+    
+    for param_name in param_names:
+        # Get the original shape for this parameter
+        original_shape = shapes[param_name]
+        
+        # Calculate the total flattened length
+        total_length = int(np.prod(original_shape))
+        
+        # Preallocate a flat buffer for this parameter
+        flat_buffer = np.zeros(total_length, dtype=np.float64)
+        
+        # Iterate over workers to place their shards
+        for worker_idx, shards in enumerate(param_shards_per_worker):
+            # Get the slice boundaries for this parameter and worker
+            start, end = shard_slices_per_worker[worker_idx][param_name]
+            
+            # Get the shard for this parameter from this worker
+            shard = shards[param_name]
+            
+            # Place the shard at the correct position in the flat buffer
+            flat_buffer[start:end] = shard
+        
+        # Reshape the flat buffer to the original shape
+        gathered_params[param_name] = flat_buffer.reshape(original_shape)
+    
+    return gathered_params
 
 # Step 35 - zero_optimizer_step (not yet solved)
 # TODO: implement
