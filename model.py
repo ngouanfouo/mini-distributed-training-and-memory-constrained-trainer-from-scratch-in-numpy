@@ -288,11 +288,68 @@ def recompute_block_activations(x, params):
     
     return cache
 
-# Step 17 - mlp_backward_checkpointed (not yet solved)
-# TODO: implement
+# Step 17 - mlp_backward_checkpointed
+def recompute_block_activations(x, params):
+    W1, b1 = params['W1'], params['b1']
+    W2, b2 = params['W2'], params['b2']
+    
+    # 1. First linear layer
+    z1 = linear_forward(x, W1, b1)
+    
+    # 2. ReLU activation
+    a1 = relu_forward(z1)
+    
+    # 3. Second linear layer (must take post-activation a1)
+    z2 = linear_forward(a1, W2, b2)
+    
+    return {
+        'x': x,
+        'z1': z1,
+        'a1': a1,
+        'z2': z2
+    }
 
-# Step 18 - estimate_checkpointing_memory_savings (not yet solved)
-# TODO: implement
+def mlp_backward_checkpointed(dy_pred, light_cache, params):
+    # Extract saved input tensor
+    x = light_cache['x']
+    
+    # Recompute full activation cache
+    full_cache = recompute_block_activations(x, params)
+    
+    # Pass recomputed cache and dy_pred to standard backward pass
+    return mlp_backward(dy_pred, full_cache, params)
+
+# Step 18 - estimate_checkpointing_memory_savings
+def estimate_checkpointing_memory_savings(batch_size, in_dim, hidden_dim, out_dim, dtype_bytes):
+    """
+    Estimates activation memory in bytes retained during the forward pass of the 
+    two-layer MLP for both full caching and checkpointed caching.
+
+    Args:
+        batch_size: Number of samples in the batch (N)
+        in_dim: Input dimension
+        hidden_dim: Hidden layer dimension
+        out_dim: Output dimension
+        dtype_bytes: Number of bytes per element (e.g., 4 for float32)
+
+    Returns:
+        A dictionary with integer keys 'full_bytes', 'checkpoint_bytes', and 'saved_bytes'.
+    """
+    # Full forward caches block input (x), hidden pre-activation (z1), and post-activation (a1)
+    full_elements = (batch_size * in_dim) + (batch_size * hidden_dim) + (batch_size * hidden_dim)
+    full_bytes = full_elements * dtype_bytes
+    
+    # Checkpointed forward caches only the block input (x)
+    checkpoint_elements = batch_size * in_dim
+    checkpoint_bytes = checkpoint_elements * dtype_bytes
+    
+    saved_bytes = full_bytes - checkpoint_bytes
+    
+    return {
+        'full_bytes': int(full_bytes),
+        'checkpoint_bytes': int(checkpoint_bytes),
+        'saved_bytes': int(saved_bytes)
+    }
 
 # Step 19 - cast_to_half_precision (not yet solved)
 # TODO: implement
