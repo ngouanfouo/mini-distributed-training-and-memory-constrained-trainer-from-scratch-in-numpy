@@ -749,8 +749,66 @@ def partition_optimizer_state(state, num_workers):
             
     return workers
 
-# Step 33 - local_shard_adam_update (not yet solved)
-# TODO: implement
+# Step 33 - local_shard_adam_update
+def local_shard_adam_update(params, grads, worker_state, lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8):
+    """
+    Performs one Adam optimizer update on only the local shard of each parameter 
+    owned by this worker.
+    
+    Args:
+        params: Dictionary of full parameter NumPy arrays.
+        grads: Dictionary of full gradient NumPy arrays.
+        worker_state: Dictionary containing 'm', 'v', 't', 'shard_slices', and 'shapes'.
+        lr: Learning rate.
+        beta1: Exponential decay rate for the first moment estimates.
+        beta2: Exponential decay rate for the second moment estimates.
+        eps: Small constant for numerical stability.
+        
+    Returns:
+        A tuple of (updated_param_shards, updated_worker_state).
+    """
+    t = worker_state['t'] + 1
+    
+    new_m = {}
+    new_v = {}
+    updated_param_shards = {}
+    
+    for k, param in params.items():
+        start, end = worker_state['shard_slices'][k]
+        
+        # Extract parameter shard
+        p_flat = param.flatten()
+        p_shard = p_flat[start:end]
+        
+        # Extract gradient shard
+        g_flat = grads[k].flatten()
+        g_shard = g_flat[start:end]
+        
+        # Get existing moment shards
+        m_shard = worker_state['m'][k]
+        v_shard = worker_state['v'][k]
+        
+        # Update biased first and second moment estimates
+        m_new = beta1 * m_shard + (1 - beta1) * g_shard
+        v_new = beta2 * v_shard + (1 - beta2) * (g_shard ** 2)
+        
+        new_m[k] = m_new
+        new_v[k] = v_new
+        
+        # Compute bias-corrected estimates
+        m_hat = m_new / (1 - beta1 ** t)
+        v_hat = v_new / (1 - beta2 ** t)
+        
+        # Update parameter shard
+        p_shard_updated = p_shard - lr * m_hat / (np.sqrt(v_hat) + eps)
+        updated_param_shards[k] = p_shard_updated
+        
+    updated_worker_state = worker_state.copy()
+    updated_worker_state['m'] = new_m
+    updated_worker_state['v'] = new_v
+    updated_worker_state['t'] = t
+    
+    return updated_param_shards, updated_worker_state
 
 # Step 34 - all_gather_param_shards (not yet solved)
 # TODO: implement
