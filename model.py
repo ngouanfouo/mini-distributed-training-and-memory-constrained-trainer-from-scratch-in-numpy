@@ -100,8 +100,27 @@ def mse_loss_and_grad(y_pred, y_true):
     
     return loss, dy_pred
 
-# Step 7 - linear_backward (not yet solved)
-# TODO: implement
+# Step 7 - linear_backward
+import numpy as np
+
+def linear_backward(d_out, x, w):
+    # d_out shape: (N, out_dim)
+    # x shape: (N, in_dim)
+    # w shape: (in_dim, out_dim)
+    
+    # Gradient with respect to input: dx = d_out @ w.T
+    # Shape: (N, out_dim) @ (out_dim, in_dim) -> (N, in_dim)
+    dx = d_out @ w.T
+    
+    # Gradient with respect to weight: dw = x.T @ d_out
+    # Shape: (in_dim, N) @ (N, out_dim) -> (in_dim, out_dim)
+    dw = x.T @ d_out
+    
+    # Gradient with respect to bias: db = sum of d_out over batch dimension
+    # Shape: (out_dim,)
+    db = np.sum(d_out, axis=0)
+    
+    return dx, dw, db
 
 # Step 8 - relu_backward (not yet solved)
 # TODO: implement
