@@ -396,8 +396,21 @@ def scale_loss(loss, dy_pred, scale):
     scaled_dy_pred = dy_pred * scale
     return scaled_loss, scaled_dy_pred
 
-# Step 22 - unscale_gradients (not yet solved)
-# TODO: implement
+# Step 22 - unscale_gradients
+def unscale_gradients(grads, scale):
+    """
+    Divides every gradient tensor in the given dictionary by the loss scale factor 
+    and returns a new dictionary with independent arrays stored in np.float32.
+    
+    Args:
+        grads: Dictionary mapping string keys to gradient NumPy arrays.
+        scale: Loss scaling factor (scalar).
+        
+    Returns:
+        A new dictionary with the same keys, where each gradient array is divided 
+        by scale and cast to float32.
+    """
+    return {k: (v / scale).astype(np.float32) for k, v in grads.items()}
 
 # Step 23 - has_non_finite_gradients (not yet solved)
 # TODO: implement
