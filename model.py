@@ -228,19 +228,25 @@ def scale_accumulated_gradients(accum_grads, num_micro_batches):
 # Step 14 - grad_accumulation_step
 def grad_accumulation_step(x, y, params, micro_batch_size):
     micro_batches = split_into_micro_batches(x, y, micro_batch_size)
-    K = len(micro_batches)
     total_grads = None
+    total_samples = 0
 
     for x_mb, y_mb in micro_batches:
+        m = x_mb.shape[0]  # this micro-batch's actual size
+
         y_pred, cache = mlp_forward(x_mb, params)
         loss, dy_pred = mse_loss_and_grad(y_pred, y_mb)
         new_grads = mlp_backward(dy_pred, cache, params)
 
-        # accumulate the RAW micro-batch gradient (no scaling yet)
-        total_grads = accumulate_gradients(total_grads, new_grads)
+        # new_grads is already averaged over this micro-batch (size m).
+        # Re-weight by m so summing recovers a proper sum-over-all-samples,
+        # then a single division by total N gives the true full-batch mean.
+        weighted = {k: v * m for k, v in new_grads.items()}
+        total_grads = accumulate_gradients(total_grads, weighted)
+        total_samples += m
 
-    # apply the averaging exactly once, at the end
-    total_grads = {k: v / K for k, v in total_grads.items()}
+    # normalize by TOTAL SAMPLES, not by number of micro-batches
+    total_grads = {k: v / total_samples for k, v in total_grads.items()}
     return total_grads
 
 # Step 15 - mlp_forward_checkpointed
