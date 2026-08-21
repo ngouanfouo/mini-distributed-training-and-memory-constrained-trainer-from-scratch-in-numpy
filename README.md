@@ -1,56 +1,35 @@
-# Mini Distributed Training and Memory-Constrained Trainer from Scratch in NumPy
+# Mini Distributed Training & Memory-Constrained Trainer — Pure NumPy
+ 
+A from-scratch training stack, built entirely in NumPy, that mirrors the core techniques modern deep learning frameworks use to **scale models** and **fit them into limited memory**. No PyTorch, no autograd engine — every gradient is derived and implemented by hand.
+ 
+This project walks through an MLP with manual backprop, then layers on the same tricks used in large-scale training: gradient accumulation, activation checkpointing, mixed precision, data-parallel all-reduce, and ZeRO-style optimizer state sharding — each implemented under an explicit, realistic memory budget.
 
-Build a complete training stack in pure NumPy that mirrors how modern frameworks scale models and fit them into limited memory. Implement an MLP with manual autograd, then add gradient accumulation, activation checkpointing, mixed precision, data-parallel all-reduce, and ZeRO-style optimizer sharding under realistic memory budgets.
-
-## How to run
-
-```bash
-python scaffold.py
-```
-
-## Steps
-
-- [x] **1.** make_synthetic_regression_batch
-- [x] **2.** init_mlp_params
-- [x] **3.** linear_forward
-- [x] **4.** relu_forward
-- [x] **5.** mlp_forward
-- [x] **6.** mse_loss_and_grad
-- [x] **7.** linear_backward
-- [x] **8.** relu_backward
-- [x] **9.** first_linear_backward
-- [x] **10.** mlp_backward
-- [x] **11.** split_into_micro_batches
-- [x] **12.** accumulate_gradients
-- [x] **13.** scale_accumulated_gradients
-- [x] **14.** grad_accumulation_step
-- [x] **15.** mlp_forward_checkpointed
-- [x] **16.** recompute_block_activations
-- [x] **17.** mlp_backward_checkpointed
-- [x] **18.** estimate_checkpointing_memory_savings
-- [x] **19.** cast_to_half_precision
-- [x] **20.** make_master_params
-- [x] **21.** scale_loss
-- [x] **22.** unscale_gradients
-- [x] **23.** has_non_finite_gradients
-- [x] **24.** mixed_precision_step
-- [x] **25.** shard_dataset_across_workers
-- [x] **26.** compute_local_gradients
-- [x] **27.** all_reduce_mean
-- [x] **28.** ring_all_reduce_mean
-- [x] **29.** data_parallel_train_step
-- [x] **30.** bucket_gradients
-- [x] **31.** init_adam_state
-- [x] **32.** partition_optimizer_state
-- [x] **33.** local_shard_adam_update
-- [x] **34.** all_gather_param_shards
-- [x] **35.** zero_optimizer_step
-- [x] **36.** compute_param_memory_bytes
-- [x] **37.** compute_optimizer_memory_bytes
-- [x] **38.** compute_peak_activation_memory_bytes
-- [x] **39.** compare_memory_with_and_without_optimizations
-- [x] **40.** full_distributed_training_loop
-
----
-
-Built on Deep-ML.
+### Author:Tiayo Durel
+ 
+## Why this project
+ 
+Frameworks like PyTorch and JAX hide an enormous amount of machinery behind `.backward()` and a `Trainer` class. This project rebuilds that machinery from first principles so the *mechanics* — not just the API — are transparent:
+ 
+- How does a forward/backward pass actually compute and store gradients?
+- Why does gradient accumulation reproduce a large-batch gradient exactly?
+- What does activation checkpointing trade away, and why does it save memory?
+- How does mixed precision keep accuracy while halving memory footprint?
+- How do multiple "workers" synchronize gradients under data parallelism?
+- How does ZeRO shard optimizer state across workers without changing the math?
+## Features
+ 
+### 1. MLP with Manual Autograd
+- Forward pass (`mlp_forward`) with cached activations for backprop
+- Mean-squared-error loss and gradient (`mse_loss_and_grad`)
+- Manual backward pass (`mlp_backward`) deriving gradients for `W1`, `b1`, `W2`, `b2`
+- Verified numerically against full-batch gradients at every later stage
+### 2. Gradient Accumulation
+- Splits a batch into micro-batches (`split_into_micro_batches`) to fit a memory budget
+- Accumulates per-micro-batch gradients (`accumulate_gradients`) and rescales once at the end
+- Produces a gradient **numerically identical** to running the full batch at once — including with uneven micro-batch sizes
+### 3. Activation Checkpointing
+- Trades compute for memory by discarding intermediate activations and recomputing them during the backward pass
+- Demonstrates the classic memory/compute tradeoff at the heart of training very deep or very large models
+### 4. Mixed Precision Training
+- Simulates lower-precision (e.g. fp16-style) forward/backward computation with a fp32 master-weight copy
+- Covers loss scaling to prevent gradient underflow, and unscaling before the optimizer step
