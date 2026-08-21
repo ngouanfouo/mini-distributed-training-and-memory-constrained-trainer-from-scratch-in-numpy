@@ -870,8 +870,13 @@ def zero_optimizer_step(params, grads, worker_states, lr=0.001,
 
     return new_params, new_worker_states
 
-# Step 36 - compute_param_memory_bytes (not yet solved)
-# TODO: implement
+# Step 36 - compute_param_memory_bytes
+def compute_param_memory_bytes(params):
+    # TODO: sum the total bytes occupied by every parameter array in the dict.
+    total_bytes = 0
+    for arr in params.values():
+        total_bytes += arr.nbytes
+    return total_bytes
 
 # Step 37 - compute_optimizer_memory_bytes (not yet solved)
 # TODO: implement
