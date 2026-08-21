@@ -992,6 +992,240 @@ def compare_memory_with_and_without_optimizations(x, params, num_workers):
         'savings_ratio': savings_ratio
     }
 
-# Step 40 - full_distributed_training_loop (not yet solved)
-# TODO: implement
+# Step 40 - full_distributed_training_loop
+def full_distributed_training_loop(x, y, num_workers=2, num_steps=10, micro_batch_size=8,
+                                   lr=1e-3, hidden_dim=16, use_checkpointing=True,
+                                   use_mixed_precision=True, use_zero=True, seed=0):
+    np.random.seed(seed)
+    input_dim = x.shape[1]
+    output_dim = y.shape[1] if y.ndim > 1 else 1
+
+    # ---------- helper: forward/backward (standard & checkpointed) ----------
+    def relu(z):
+        return np.maximum(0, z)
+
+    def forward_standard(x_in, params):
+        W1, b1, W2, b2 = params['W1'], params['b1'], params['W2'], params['b2']
+        z1 = x_in @ W1 + b1
+        a1 = relu(z1)
+        z2 = a1 @ W2 + b2
+        cache = {'x': x_in, 'z1': z1, 'a1': a1, 'z2': z2}
+        return z2, cache
+
+    def forward_checkpointed(x_in, params):
+        W1, b1, W2, b2 = params['W1'], params['b1'], params['W2'], params['b2']
+        z1 = x_in @ W1 + b1
+        a1 = relu(z1)
+        z2 = a1 @ W2 + b2
+        cache = {'x': x_in}
+        return z2, cache
+
+    def backward_standard(x_in, y_in, params, cache):
+        W1, b1, W2, b2 = params['W1'], params['b1'], params['W2'], params['b2']
+        z1 = cache['z1']
+        a1 = cache['a1']
+        z2 = cache['z2']
+        batch_size = x_in.shape[0]
+        dz2 = (z2 - y_in) / batch_size
+        dW2 = a1.T @ dz2
+        db2 = np.sum(dz2, axis=0)
+        da1 = dz2 @ W2.T
+        dz1 = da1 * (z1 > 0)
+        dW1 = x_in.T @ dz1
+        db1 = np.sum(dz1, axis=0)
+        return {'W1': dW1, 'b1': db1, 'W2': dW2, 'b2': db2}
+
+    def backward_checkpointed(x_in, y_in, params, cache):
+        # recompute forward from x_in (only stored in cache)
+        W1, b1, W2, b2 = params['W1'], params['b1'], params['W2'], params['b2']
+        z1 = x_in @ W1 + b1
+        a1 = relu(z1)
+        z2 = a1 @ W2 + b2
+        batch_size = x_in.shape[0]
+        dz2 = (z2 - y_in) / batch_size
+        dW2 = a1.T @ dz2
+        db2 = np.sum(dz2, axis=0)
+        da1 = dz2 @ W2.T
+        dz1 = da1 * (z1 > 0)
+        dW1 = x_in.T @ dz1
+        db1 = np.sum(dz1, axis=0)
+        return {'W1': dW1, 'b1': db1, 'W2': dW2, 'b2': db2}
+
+    # ---------- parameter initialisation (fp64 master) ----------
+    W1 = np.random.randn(input_dim, hidden_dim) * 0.01
+    b1 = np.zeros(hidden_dim)
+    W2 = np.random.randn(hidden_dim, output_dim) * 0.01
+    b2 = np.zeros(output_dim)
+    master_params = {
+        'W1': W1.astype(np.float64),
+        'b1': b1.astype(np.float64),
+        'W2': W2.astype(np.float64),
+        'b2': b2.astype(np.float64)
+    }
+
+    # ---------- flatten / unflatten helpers for ZeRO ----------
+    def flatten_params_dict(pdict):
+        flat = []
+        shapes = {}
+        indices = {}
+        start = 0
+        for k, v in pdict.items():
+            shapes[k] = v.shape
+            flat.append(v.ravel())
+            size = v.size
+            indices[k] = (start, start + size)
+            start += size
+        flat_all = np.concatenate(flat)
+        return flat_all, shapes, indices
+
+    def unflatten_params_dict(flat, shapes, indices):
+        pdict = {}
+        for k, (start, end) in indices.items():
+            pdict[k] = flat[start:end].reshape(shapes[k])
+        return pdict
+
+    flat_params, shapes, indices = flatten_params_dict(master_params)
+    total_params = flat_params.size
+
+    # ZeRO sharding: each worker owns a contiguous slice of the flat vector
+    chunk_size = total_params // num_workers
+    remainder = total_params % num_workers
+
+    def get_worker_slice(worker_id):
+        start = worker_id * chunk_size + min(worker_id, remainder)
+        end = start + chunk_size + (1 if worker_id < remainder else 0)
+        return start, end
+
+    # Adam state (full vectors, but updates only shards)
+    m = np.zeros_like(flat_params)
+    v = np.zeros_like(flat_params)
+    t = 0
+    beta1, beta2, eps = 0.9, 0.999, 1e-8
+
+    loss_history = []
+    loss_scale = 128.0
+
+    # ---------- training loop ----------
+    for step in range(num_steps):
+        # Shard dataset across workers
+        total_samples = x.shape[0]
+        shard_size = total_samples // num_workers
+        worker_grads_sum = {k: np.zeros_like(v) for k, v in master_params.items()}
+
+        for worker_id in range(num_workers):
+            start_idx = worker_id * shard_size
+            end_idx = (worker_id + 1) * shard_size if worker_id < num_workers - 1 else total_samples
+            x_shard = x[start_idx:end_idx]
+            y_shard = y[start_idx:end_idx]
+
+            # Split shard into micro‑batches
+            num_micro = x_shard.shape[0] // micro_batch_size
+            grads_accum = {k: np.zeros_like(v) for k, v in master_params.items()}
+            micro_count = 0
+
+            for mb in range(num_micro):
+                mb_start = mb * micro_batch_size
+                mb_end = (mb + 1) * micro_batch_size
+                x_mb = x_shard[mb_start:mb_end]
+                y_mb = y_shard[mb_start:mb_end]
+
+                if use_mixed_precision:
+                    # forward/backward on fp16 copy
+                    fp16_params = {k: master_params[k].astype(np.float16) for k in master_params}
+                    if use_checkpointing:
+                        out, cache = forward_checkpointed(x_mb.astype(np.float16), fp16_params)
+                    else:
+                        out, cache = forward_standard(x_mb.astype(np.float16), fp16_params)
+
+                    loss = 0.5 * np.mean((out - y_mb.astype(np.float16)) ** 2)
+                    scaled_loss = loss * loss_scale
+
+                    if use_checkpointing:
+                        grads_fp16 = backward_checkpointed(x_mb.astype(np.float16), y_mb.astype(np.float16),
+                                                           fp16_params, cache)
+                    else:
+                        grads_fp16 = backward_standard(x_mb.astype(np.float16), y_mb.astype(np.float16),
+                                                       fp16_params, cache)
+
+                    grads_fp32 = {k: grads_fp16[k].astype(np.float32) / loss_scale for k in grads_fp16}
+                    # skip if any gradient is non‑finite
+                    if any(not np.all(np.isfinite(g)) for g in grads_fp32.values()):
+                        continue
+
+                    for k in grads_accum:
+                        grads_accum[k] += grads_fp32[k]
+                    micro_count += 1
+                else:
+                    # full fp64 forward/backward
+                    if use_checkpointing:
+                        out, cache = forward_checkpointed(x_mb.astype(np.float64), master_params)
+                    else:
+                        out, cache = forward_standard(x_mb.astype(np.float64), master_params)
+
+                    loss = 0.5 * np.mean((out - y_mb.astype(np.float64)) ** 2)
+
+                    if use_checkpointing:
+                        grads = backward_checkpointed(x_mb.astype(np.float64), y_mb.astype(np.float64),
+                                                      master_params, cache)
+                    else:
+                        grads = backward_standard(x_mb.astype(np.float64), y_mb.astype(np.float64),
+                                                  master_params, cache)
+
+                    for k in grads_accum:
+                        grads_accum[k] += grads[k]
+                    micro_count += 1
+
+            # Average gradients over micro‑batches for this worker
+            if micro_count > 0:
+                for k in grads_accum:
+                    grads_accum[k] /= micro_count
+
+            # Accumulate across workers (will be averaged later)
+            for k in worker_grads_sum:
+                worker_grads_sum[k] += grads_accum[k]
+
+        # All‑reduce: average gradients across workers
+        for k in worker_grads_sum:
+            worker_grads_sum[k] /= num_workers
+
+        # Flatten the averaged gradients
+        flat_grads, _, _ = flatten_params_dict(worker_grads_sum)
+
+        # ZeRO‑sharded Adam update: each worker updates only its slice
+        new_flat = flat_params.copy()
+        for worker_id in range(num_workers):
+            start, end = get_worker_slice(worker_id)
+            g_chunk = flat_grads[start:end]
+
+            m_chunk = m[start:end]
+            v_chunk = v[start:end]
+            t += 1
+
+            m_chunk = beta1 * m_chunk + (1 - beta1) * g_chunk
+            v_chunk = beta2 * v_chunk + (1 - beta2) * (g_chunk ** 2)
+            m_hat = m_chunk / (1 - beta1 ** t)
+            v_hat = v_chunk / (1 - beta2 ** t)
+
+            update = lr * m_hat / (np.sqrt(v_hat) + eps)
+            new_flat[start:end] -= update
+
+            # store updated moments back
+            m[start:end] = m_chunk
+            v[start:end] = v_chunk
+
+        # all‑gather (simulated: we already have the full vector)
+        flat_params = new_flat
+        master_params = unflatten_params_dict(flat_params, shapes, indices)
+
+        # Record average loss over the entire dataset (using updated params)
+        if use_mixed_precision:
+            fp16_params = {k: master_params[k].astype(np.float16) for k in master_params}
+            out, _ = forward_standard(x.astype(np.float16), fp16_params)
+            loss = 0.5 * np.mean((out - y.astype(np.float16)) ** 2)
+        else:
+            out, _ = forward_standard(x.astype(np.float64), master_params)
+            loss = 0.5 * np.mean((out - y.astype(np.float64)) ** 2)
+        loss_history.append(float(loss))
+
+    return {'loss_history': loss_history, 'final_params': master_params}
 
