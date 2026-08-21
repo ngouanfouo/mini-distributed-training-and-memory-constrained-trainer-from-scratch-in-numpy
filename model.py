@@ -897,8 +897,34 @@ def compute_optimizer_memory_bytes(state, num_workers=1, sharded=False):
     
     return total_bytes
 
-# Step 38 - compute_peak_activation_memory_bytes (not yet solved)
-# TODO: implement
+# Step 38 - compute_peak_activation_memory_bytes
+def compute_peak_activation_memory_bytes(x, params, checkpointed=False):
+    # TODO: return total bytes of activations retained by the forward cache
+    W1 = params['W1']
+    b1 = params['b1']
+    W2 = params['W2']
+    b2 = params['b2']
+    
+    if checkpointed:
+        # Checkpointed forward: only retain input x
+        cache = {'x': x}
+        # We still need to compute the forward pass but only keep x
+        # The rest is not stored
+        z1 = x @ W1 + b1
+        a1 = np.maximum(0, z1)
+        z2 = a1 @ W2 + b2
+        # z2 not stored in cache
+    else:
+        # Standard forward: retain x, z1, a1, z2
+        z1 = x @ W1 + b1
+        a1 = np.maximum(0, z1)
+        z2 = a1 @ W2 + b2
+        cache = {'x': x, 'z1': z1, 'a1': a1, 'z2': z2}
+    
+    total_bytes = 0
+    for arr in cache.values():
+        total_bytes += arr.nbytes
+    return total_bytes
 
 # Step 39 - compare_memory_with_and_without_optimizations (not yet solved)
 # TODO: implement
