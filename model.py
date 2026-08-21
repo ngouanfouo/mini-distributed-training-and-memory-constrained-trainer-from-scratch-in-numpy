@@ -926,8 +926,71 @@ def compute_peak_activation_memory_bytes(x, params, checkpointed=False):
         total_bytes += arr.nbytes
     return total_bytes
 
-# Step 39 - compare_memory_with_and_without_optimizations (not yet solved)
-# TODO: implement
+# Step 39 - compare_memory_with_and_without_optimizations
+def compare_memory_with_and_without_optimizations(x, params, num_workers):
+    # ------------------------------------------------------------------
+    # BASELINE: fp32 parameters, fp32 optimizer (full), fp32 activations,
+    #           no activation checkpointing.
+    # ------------------------------------------------------------------
+    # Cast to fp32 for a consistent baseline (even if input is fp64)
+    params_fp32 = {k: v.astype(np.float32) for k, v in params.items()}
+    baseline_params = compute_param_memory_bytes(params_fp32)
+
+    # Adam state: two moments, each same shape as parameters, in fp32
+    m_baseline = {k: np.zeros_like(v, dtype=np.float32) for k, v in params_fp32.items()}
+    v_baseline = {k: np.zeros_like(v, dtype=np.float32) for k, v in params_fp32.items()}
+    state_baseline = {'m': m_baseline, 'v': v_baseline, 't': 0}
+    baseline_optimizer = compute_optimizer_memory_bytes(state_baseline, num_workers=1, sharded=False)
+
+    # Activations: fp32 input, uncheckpointed
+    x_fp32 = x.astype(np.float32)
+    baseline_activations = compute_peak_activation_memory_bytes(x_fp32, params_fp32, checkpointed=False)
+
+    baseline_bytes = baseline_params + baseline_optimizer + baseline_activations
+
+    # ------------------------------------------------------------------
+    # OPTIMIZED: fp16 parameters, fp32 optimizer (sharded), fp16 activations,
+    #            checkpointed forward pass.
+    # ------------------------------------------------------------------
+    # Parameters in fp16 (half the size)
+    params_fp16 = {k: v.astype(np.float16) for k, v in params.items()}
+    optimized_params = compute_param_memory_bytes(params_fp16)
+
+    # Optimizer state remains in fp32 (same as baseline) but is sharded
+    # across workers when num_workers > 1.
+    m_opt = {k: np.zeros_like(v, dtype=np.float32) for k, v in params_fp32.items()}
+    v_opt = {k: np.zeros_like(v, dtype=np.float32) for k, v in params_fp32.items()}
+    state_opt = {'m': m_opt, 'v': v_opt, 't': 0}
+    optimized_optimizer = compute_optimizer_memory_bytes(
+        state_opt,
+        num_workers=num_workers,
+        sharded=(num_workers > 1)   # only shard when more than one worker
+    )
+
+    # Activations: fp16 input, checkpointed (retains only the block input)
+    x_fp16 = x.astype(np.float16)
+    optimized_activations = compute_peak_activation_memory_bytes(x_fp16, params_fp16, checkpointed=True)
+
+    optimized_bytes = optimized_params + optimized_optimizer + optimized_activations
+
+    # Savings ratio: fraction of memory freed
+    savings_ratio = (baseline_bytes - optimized_bytes) / baseline_bytes
+
+    return {
+        'baseline_bytes': baseline_bytes,
+        'optimized_bytes': optimized_bytes,
+        'breakdown_baseline': {
+            'params': baseline_params,
+            'optimizer': baseline_optimizer,
+            'activations': baseline_activations
+        },
+        'breakdown_optimized': {
+            'params': optimized_params,
+            'optimizer': optimized_optimizer,
+            'activations': optimized_activations
+        },
+        'savings_ratio': savings_ratio
+    }
 
 # Step 40 - full_distributed_training_loop (not yet solved)
 # TODO: implement
