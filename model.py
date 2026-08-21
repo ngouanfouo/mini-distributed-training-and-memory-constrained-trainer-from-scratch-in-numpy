@@ -878,8 +878,24 @@ def compute_param_memory_bytes(params):
         total_bytes += arr.nbytes
     return total_bytes
 
-# Step 37 - compute_optimizer_memory_bytes (not yet solved)
-# TODO: implement
+# Step 37 - compute_optimizer_memory_bytes
+def compute_optimizer_memory_bytes(state, num_workers=1, sharded=False):
+    # TODO: return per-worker bytes of Adam state (m and v), dividing by num_workers if sharded.
+    total_bytes = 0
+    
+    # Sum bytes for 'm' moment tensors
+    for arr in state['m'].values():
+        total_bytes += arr.nbytes
+    
+    # Sum bytes for 'v' moment tensors
+    for arr in state['v'].values():
+        total_bytes += arr.nbytes
+    
+    # If sharded, divide by number of workers (each worker stores a fraction)
+    if sharded:
+        total_bytes //= num_workers
+    
+    return total_bytes
 
 # Step 38 - compute_peak_activation_memory_bytes (not yet solved)
 # TODO: implement
